@@ -26,24 +26,32 @@ jobs:
         ROOT_DIR=$(find extracted_project -name "settings.gradle*" -o -name "build.gradle*" | head -n 1 | xargs dirname)
         echo "PROJECT_PATH=$ROOT_DIR" >> $GITHUB_ENV
 
-    - name: Force Overwrite Java Target in App Gradle
+    - name: Force Java 17 Overrides
       run: |
         cd ${{ env.PROJECT_PATH }}
         python3 -c "
         import os, glob
 
-        # Find app/build.gradle or root build.gradle
         gradle_files = glob.glob('./**/build.gradle*', recursive=True)
+
+        override_block = '''
+        allprojects {
+            tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                kotlinOptions {
+                    jvmTarget = \"17\"
+                }
+            }
+        }
+        '''
 
         for fpath in gradle_files:
             with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()
 
-            # Force replace Java version values
             content = content.replace('JavaVersion.VERSION_1_8', 'JavaVersion.VERSION_17')
             content = content.replace(\"'1.8'\", \"'17'\")
             content = content.replace('\"1.8\"', '\"17\"')
-            content = content.replace('1.8', '17')
+            content += override_block
 
             with open(fpath, 'w', encoding='utf-8') as f:
                 f.write(content)
@@ -52,7 +60,7 @@ jobs:
     - name: Build Debug APK
       run: |
         cd ${{ env.PROJECT_PATH }}
-        gradle assembleDebug -Dorg.gradle.java.home=$JAVA_HOME -Pkotlin.jvm.target.validation.mode=ignore --no-daemon
+        gradle assembleDebug -Dorg.gradle.java.home=$JAVA_HOME --no-daemon
 
     - name: Find and Rename APK
       run: |
