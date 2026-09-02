@@ -26,43 +26,22 @@ jobs:
         ROOT_DIR=$(find extracted_project -name "settings.gradle*" -o -name "build.gradle*" | head -n 1 | xargs dirname)
         echo "PROJECT_PATH=$ROOT_DIR" >> $GITHUB_ENV
 
-    - name: Force Global Java 17 Configuration
+    - name: Configure Gradle Environment
       run: |
         cd ${{ env.PROJECT_PATH }}
-        python3 -c "
-        import os, glob
-
-        gradle_files = glob.glob('./**/build.gradle*', recursive=True)
-
-        override_code = '''
-        
-        // --- Forced Target Override ---
-        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-            kotlinOptions {
-                jvmTarget = \"17\"
-            }
-        }
-        '''
-
-        for fpath in gradle_files:
-            with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
-
-            content = content.replace('JavaVersion.VERSION_1_8', 'JavaVersion.VERSION_17')
-            content = content.replace(\"'1.8'\", \"'17'\")
-            content = content.replace('\"1.8\"', '\"17\"')
-            
-            # Inject override block at the end of build file
-            content += override_code
-
-            with open(fpath, 'w', encoding='utf-8') as f:
-                f.write(content)
-        "
+        echo "org.gradle.java.home=$JAVA_HOME" >> gradle.properties
+        echo "android.useAndroidX=true" >> gradle.properties
+        echo "kotlin.jvm.target.validation.mode=ignore" >> gradle.properties
 
     - name: Build Debug APK
       run: |
         cd ${{ env.PROJECT_PATH }}
-        gradle assembleDebug -Dorg.gradle.java.home=$JAVA_HOME -Pkotlin.jvm.target.validation.mode=ignore --no-daemon
+        chmod +x gradlew || true
+        gradle assembleDebug \
+          -Dorg.gradle.java.home=$JAVA_HOME \
+          -Dorg.gradle.jvmargs="-Xmx3072m -Dfile.encoding=UTF-8" \
+          -Pkotlin.jvm.target.validation.mode=ignore \
+          --no-daemon
 
     - name: Find and Rename APK
       run: |
