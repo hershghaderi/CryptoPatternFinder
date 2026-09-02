@@ -1,0 +1,67 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Extract Project ZIP
+      run: |
+        mkdir -p extracted_project
+        unzip -o *.zip -d extracted_project
+        ROOT_DIR=$(find extracted_project -name "settings.gradle*" -o -name "build.gradle*" | head -n 1 | xargs dirname)
+        echo "PROJECT_PATH=$ROOT_DIR" >> $GITHUB_ENV
+
+    - name: Force Overwrite Java Target in App Gradle
+      run: |
+        cd ${{ env.PROJECT_PATH }}
+        python3 -c "
+        import os, glob
+
+        # Find app/build.gradle or root build.gradle
+        gradle_files = glob.glob('./**/build.gradle*', recursive=True)
+
+        for fpath in gradle_files:
+            with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+
+            # Force replace Java version values
+            content = content.replace('JavaVersion.VERSION_1_8', 'JavaVersion.VERSION_17')
+            content = content.replace(\"'1.8'\", \"'17'\")
+            content = content.replace('\"1.8\"', '\"17\"')
+            content = content.replace('1.8', '17')
+
+            with open(fpath, 'w', encoding='utf-8') as f:
+                f.write(content)
+        "
+
+    - name: Build Debug APK
+      run: |
+        cd ${{ env.PROJECT_PATH }}
+        gradle assembleDebug -Dorg.gradle.java.home=$JAVA_HOME -Pkotlin.jvm.target.validation.mode=ignore --no-daemon
+
+    - name: Find and Rename APK
+      run: |
+        APK_PATH=$(find ${{ env.PROJECT_PATH }} -name "*.apk" | head -n 1)
+        mkdir -p output_apk
+        cp "$APK_PATH" output_apk/Hersh-CryptoPatternFinder.apk
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: Hersh-CryptoPatternFinder
+        path: output_apk/Hersh-CryptoPatternFinder.apk
